@@ -1,0 +1,226 @@
+---
+jupyter:
+  jupytext:
+    formats: ipynb,py:percent,md
+    text_representation:
+      extension: .md
+      format_name: markdown
+      format_version: '1.2'
+      jupytext_version: 1.4.2
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+# Predicting the sale price of Bulldozers using Machine Learning
+In thins notebook, we're going to go through an example machine learning project with the goal of predicting the sale price of bulldozers.  
+## 1. Problem defition
+> How well can we predict the future sale price of a bulldozer, given bulldozers have been sold for?
+## 2. Data
+The data is downloaded from the Kaggle Bulebook for Bulldozers compertition:  https://www.kaggle.com/c/bluebook-for-bulldozers/data    
+There are 3 main datasets:
+
+* Train.csv is the training set, which contains data through the end of 2011.
+* Valid.csv is the validation set, which contains data from January 1, 2012 - April 30, 2012 You make predictions on this set throughout the majority of the competition. Your score on this set is used to create the public leaderboard.
+* Test.csv is the test set, which won't be released until the last week of the competition. It contains data from May 1, 2012 - November 2012. Your score on the test set determines your final rank for the competition.  
+
+## 3. Evaluation
+The evaluation metric for this competition is the RMSLE (root mean squared log error) between the actual and predicted auction prices.  
+For more on the evaluation of this project check: https://www.kaggle.com/c/bluebook-for-bulldozers/overview/evaluation  
+**Note:** The goal for most regression evaluation metrics is to minimize the error. For example, our goal for this project be to build a machine learning model which minimises RMSLE.  
+
+## 4. Features  
+Kaggle provides a data dictionary detailing all of the features of the dataset. You can view this data dictionary on Google Sheets: https://docs.google.com/spreadsheets/d/1jykeJFBVQPb350mZzoRO0fZdWcgDkt3B/edit#gid=1967137473
+
+```python
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import sklearn
+from jupyterthemes import jtplot
+from IPython.core.display import display, HTML
+
+display(HTML("<style>.container { width:80% !important; }</style>"))
+jtplot.style()
+```
+
+
+```python
+# Import training and validation sets
+df = pd.read_csv('data/TrainAndValid.csv', 
+                 low_memory=False)
+```
+
+```python
+df.info()
+```
+
+```python
+df.isna().sum()
+```
+
+```python
+df.columns
+```
+
+```python
+fig, ax = plt.subplots()
+ax.scatter(df['saledate'][:1000], df['SalePrice'][:1000]);
+```
+
+```python
+df.saledate[:1000]
+```
+
+```python
+df.SalePrice.plot.hist();
+```
+
+### Parsing dates
+When we work with time series data, we want to enrich the time & date component as much as possible.  
+  
+We can do thay by telling pandas which of our columns has dates in it using the `parse_dates` parameter.
+
+```python
+# Import data ag ain but this time parse dates
+df = pd.read_csv('data/TrainAndValid.csv',
+                 low_memory=False,
+                 parse_dates=['saledate'])
+```
+
+```python
+df.saledate.dtype
+```
+
+```python
+df.saledate[:1000]
+```
+
+```python
+fig, ax = plt.subplots()
+ax.scatter(df['saledate'][:1000], df['SalePrice'][:1000]);
+```
+
+```python
+df.head().T
+```
+
+### Sort DataFrame by saledate
+When working with time series data, it's a good idea to sort it by date.
+
+```python
+# Sort DataFrame in date order
+df.sort_values(by=['saledate'], inplace=True, ascending=True)
+df.saledate.head(20)
+```
+
+### Make a copy of the original DataFrame
+We make a copy of the original dataframe so when we manipulate the copy, we've still got our original data.
+
+```python
+# Make a copy
+df_tmp = df.copy()
+```
+
+```python
+
+```
+
+Add datetime parameters for `saledate` column
+
+```python
+df_tmp['saleYear'] = df_tmp.saledate.dt.year
+df_tmp['saleMonth'] = df_tmp.saledate.dt.month
+df_tmp['saleDay'] = df_tmp.saledate.dt.day
+df_tmp['saleDayOfWeek'] = df_tmp.saledate.dt.dayofweek
+df_tmp['saleDayOfYear'] = df_tmp.saledate.dt.dayofyear
+```
+
+```python
+df_tmp[:1].T
+```
+
+```python
+# Now we've enriched our DataFrame with date time features, we can remove `saledate`
+df_tmp.drop('saledate', axis=1, inplace=True)
+```
+
+```python
+# Check the values of different columns
+df_tmp.state.value_counts()
+```
+
+## 5.Modelling
+We've done enough EDA (we could always do more) but let's start to do some model-driven EDA.
+Exploratory Data Analysis
+
+```python
+# Let's vuild a machine learning model
+from sklearn.ensemble import RandomForestRegressor
+model = RandomForestRegressor(n_job=-1,
+                              random_state=42)
+```
+
+### Convert string to categories
+One way we can turn all of our data into numbers is by converting them into pandas catgories.  
+We can check the different compatible with pandas here:   
+https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.api.types.is_object_dtype.html
+
+```python
+pd.api.types.is_string_dtype(df_tmp['UsageBand'])
+```
+
+```python
+# Find the columns which contain strings
+for label, content in df_tmp.items():
+    if pd.api.types.is_string_dtype(content):
+        print(label)
+```
+
+```python
+# This will turn all of the string value into category values
+for label, content in df_tmp.items():
+    if pd.api.types.is_string_dtype(content):
+        df_tmp[label] = content.astype('category').cat.as_ordered()
+```
+
+```python
+df_tmp.info()
+```
+
+```python
+# 類別, 類別計數, 類別代碼
+df_tmp.state.cat.categories, df_tmp.state.value_counts(), df_tmp.state.cat.codes
+```
+
+Thanks to pandas Categories we now have a way to access all of our data in the form of nymbers.
+But we still have a bynch of missing data...
+
+```python
+# Check missing data
+df_tmp.isnull().sum()/len(df_tmp)
+```
+
+### Save preprocessed data
+
+```python
+# Export current tmp dataframe
+df_tmp.to_csv('data/train_tmp.csv',
+              index=False)
+```
+
+```python
+# Import preprocessed data
+df_tmp = pd.read_csv('data/train_tmp.csv',
+                     low_memory=False)
+df_tmp.head().T
+```
+
+```python
+
+```
+
+```python
+
+```
