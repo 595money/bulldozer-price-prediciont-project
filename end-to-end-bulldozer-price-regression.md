@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 ---
 jupyter:
   jupytext:
@@ -158,7 +159,7 @@ Exploratory Data Analysis
 ```python
 # Let's vuild a machine learning model
 from sklearn.ensemble import RandomForestRegressor
-model = RandomForestRegressor(n_job=-1,
+model = RandomForestRegressor(n_jobs=-1,
                               random_state=42)
 ```
 
@@ -217,10 +218,54 @@ df_tmp = pd.read_csv('data/train_tmp.csv',
 df_tmp.head().T
 ```
 
-```python
+## Fill missing values
+### Fill numerical misssing values first
 
+```python
+for label, content in df_tmp.items():
+    if pd.api.types.is_numeric_dtype(content):
+        print(label)
 ```
 
 ```python
+# Check for which numeric columns have null values
+for label, content in df_tmp.items():
+    # data 為數值的欄位
+    if pd.api.types.is_numeric_dtype(content):
+        # 加總各column的 null, 如果大於 0 就 print
+        if pd.isnull(content).sum():
+            print(label)
+```
 
+
+```python
+# Fill numeric rows with the median
+for label, content in df_tmp.items():
+    if pd.api.types.is_numeric_dtype(content):
+        if pd.isnull(content).sum():
+            # Add a binary column which tells us if the data was missing or not
+            df_tmp[label + '_is_missing'] = pd.isnull(content)
+            # Fill missing numeric values with median
+            df_tmp[label] = content.fillna(content.median())
+```
+
+
+```python
+# Demonstrate how median is more robust than mean
+hundreds = np.full((1000, ), 100)
+hundreds_billion = np.append(hundreds, 1000000000)
+np.mean(hundreds), np.mean(hundreds_billion), np.median(hundreds), np.median(hundreds_billion)
+```
+
+```python
+# Check if there's any null numeric values
+for label, content in df_tmp.items():
+    if pd.api.types.is_numeric_dtype(content):
+        if pd.isnull(content).sum():
+            print(label)
+```
+
+```python
+# Check to see how many examples missing
+df_tmp.auctioneerID_is_missing.value_counts()
 ```
