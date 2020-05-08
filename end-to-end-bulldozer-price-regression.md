@@ -269,3 +269,88 @@ for label, content in df_tmp.items():
 # Check to see how many examples missing
 df_tmp.auctioneerID_is_missing.value_counts()
 ```
+
+### Filling and turning categorical variables into numbers
+
+```python
+# Check for columns which aren't numeric
+for label, content in df_tmp.items():
+    if not pd.api.types.is_numeric_dtype(content):
+        print(label)
+```
+
+
+```python
+# Turn categorical variables into number and fill missing
+for label, content in df_tmp.items():
+    if not pd.api.types.is_numeric_dtype(content):
+        # Add binary column to indicate whether sample had missing value
+        df_tmp[label + '_is_missing'] = pd.isnull(content)
+        # Turn categories into numbers and add +1
+        # Categorical 會將 missing data 分配在 -1 所以將全部 +1
+        df_tmp[label] = pd.Categorical(content).codes +1
+```
+
+
+```python
+df_tmp.info()
+```
+
+```python
+df_tmp.head().T
+```
+
+```python
+df_tmp.isna().sum()
+```
+
+Now that all of ata is numeric as well as our dataframe has no missing values, we should be able to build a machine learning model.
+
+```python
+df_tmp.head()
+```
+
+```python
+len(df_tmp)
+```
+
+```python
+%%time
+# Instantiate model
+model = RandomForestRegressor(n_jobs=-1,
+                              random_state=42)
+
+# Fit the model
+model.fit(df_tmp.drop('SalePrice', axis=1), df_tmp['SalePrice'])
+```
+
+```python
+# Score the model
+model.score(df_tmp.drop('SalePrice', axis=1), df_tmp['SalePrice'])
+```
+
+**Question:** Why doesn't the above metric hold water? (why isn't the metric reliable)
+
+
+### Splitting data into train/validation sets
+
+```python
+df_tmp.head()
+```
+
+```python
+# Split data into training and validation
+df_val = df_tmp[df_tmp.saleYear == 2012]
+df_train = df_tmp[df_tmp.saleYear != 2012]
+len(df_val), len(df_train)
+```
+
+```python
+#Split data into X & y
+X_train, y_train = df_train.drop('SalePrice', axis=1), df_train.SalePrice
+X_valid, y_valid = df_val.drop('SalePrice', axis=1), df_val.SalePrice
+```
+
+```python
+X_train.shape, y_train.shape, X_valid.shape, y_valid.shape
+```
