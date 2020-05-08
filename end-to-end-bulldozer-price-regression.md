@@ -354,3 +354,41 @@ X_valid, y_valid = df_val.drop('SalePrice', axis=1), df_val.SalePrice
 ```python
 X_train.shape, y_train.shape, X_valid.shape, y_valid.shape
 ```
+
+### Building an evaluation function
+
+```python
+# Create evaluation function (the competition uses RMSLE)
+from sklearn.metrics import mean_squared_log_error, mean_absolute_error, r2_score
+
+def rmsle(y_test, y_preds):
+    '''
+    Caculates root mean squared log error between predictions and
+    true labels.
+    '''
+    return np.sprt(mean_squared_log_error(y_test, y_preds))
+
+# Create function to evaluation model on a few different levels
+def show_scores(model):
+    train_preds = model.predict(X_train)
+    val_preds = model.predict(X_valid)
+    scores = {'Training MAE': mean_absolute_error(y_train, train_preds),
+              'Valid MAE': mean_absolute_error(y_train, val_preds),
+              'Training RMSLE': rmesl(y_train, train_preds),
+              'Valid RMSLE': rmsle(y_train, val_preds),
+              'Training R^2': r2_score(y_train, train_preds),
+              'Valid R^2': r2_score(y_train, val_preds)}
+    return scores
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
