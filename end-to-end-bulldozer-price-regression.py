@@ -40,6 +40,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import sklearn
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder
 from jupyterthemes import jtplot
 from IPython.core.display import display, HTML
 
@@ -112,8 +116,6 @@ df.saledate.head(20)
 # %%
 # Make a copy
 df_tmp = df.copy()
-
-# %%
 
 # %% [markdown]
 # Add datetime parameters for `saledate` column
@@ -217,14 +219,14 @@ for label, content in df_tmp.items():
 
 
 # %%
-# Fill numeric rows with the median
-for label, content in df_tmp.items():
-    if pd.api.types.is_numeric_dtype(content):
-        if pd.isnull(content).sum():
-            # Add a binary column which tells us if the data was missing or not
-            df_tmp[label + '_is_missing'] = pd.isnull(content)
-            # Fill missing numeric values with median
-            df_tmp[label] = content.fillna(content.median())
+# # Fill numeric rows with the median
+# for label, content in df_tmp.items():
+#     if pd.api.types.is_numeric_dtype(content):
+#         if pd.isnull(content).sum():
+#             # Add a binary column which tells us if the data was missing or not
+#             df_tmp[label + '_is_missing'] = pd.isnull(content)
+#             # Fill missing numeric values with median
+#             df_tmp[label] = content.fillna(content.median())
 
 
 # %%
@@ -240,10 +242,6 @@ for label, content in df_tmp.items():
         if pd.isnull(content).sum():
             print(label)
 
-# %%
-# Check to see how many examples missing
-df_tmp.auctioneerID_is_missing.value_counts()
-
 # %% [markdown]
 # ### Filling and turning categorical variables into numbers
 
@@ -255,40 +253,71 @@ for label, content in df_tmp.items():
 
 
 # %%
-# Turn categorical variables into number and fill missing
-for label, content in df_tmp.items():
-    if not pd.api.types.is_numeric_dtype(content):
-        # Add binary column to indicate whether sample had missing value
-        df_tmp[label + '_is_missing'] = pd.isnull(content)
-        # Turn categories into numbers and add +1
-        # Categorical 會將 missing data 分配在 -1 所以將全部 +1
-        df_tmp[label] = pd.Categorical(content).codes +1
+# # Turn categorical variables into number and fill missing
+# for label, content in df_tmp.items():
+#     if not pd.api.types.is_numeric_dtype(content):
+#         # Add binary column to indicate whether sample had missing value
+#         df_tmp[label + '_is_missing'] = pd.isnull(content)
+#         # Turn categories into numbers and add +1
+#         # Categorical 會將 missing data 分配在 -1 所以將全部 +1
+#         df_tmp[label] = pd.Categorical(content).codes +1
 
-
-# %%
-df_tmp.info()
-
-# %%
-df_tmp.head().T
-
-# %%
-df_tmp.isna().sum()
 
 # %% [markdown]
-# Now that all of ata is numeric as well as our dataframe has no missing values, we should be able to build a machine learning model.
+# ### Splitting data into train/validation sets
 
 # %%
 df_tmp.head()
 
 # %%
-len(df_tmp)
+df_tmp.info()
+
+# %%
+# Split data into training and validation
+df_val = df_tmp[df_tmp.saleYear == 2012]
+df_train = df_tmp[df_tmp.saleYear != 2012]
+len(df_val), len(df_train)
+
+# %% [markdown]
+# ### Create pipeline
+
+# %%
+numeric_features = ['MachineHoursCurrentMeter', 'auctioneerID']
+numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='median'))
+])
+cols = [label for label, content in df_tmp.items() if not pd.api.types.is_numeric_dtype(content)]
+non_numeric_features = cols
+non_numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='constant', fill_value='missing')),
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))
+])
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features),
+        ('non_num', non_numeric_transformer, non_numeric_features)        
+    ])
+
+# %%
+# Creating a preprocessing and modelling pipeline
+model = Pipeline(steps=[('preprocessor', preprocessor),
+                       ('model', RandomForestRegressor(n_jobs=-1, 
+                                                       random_state=42))])
+
+# %%
+#Split data into X & y
+X_train, y_train = df_train.drop('SalePrice', axis=1), df_train.SalePrice
+X_valid, y_valid = df_val.drop('SalePrice', axis=1), df_val.SalePrice
+
+# %%
+X_train.shape, y_train.shape, X_valid.shape, y_valid.shape
+
+# %% [markdown]
+# Now that all of data is numeric as well as our dataframe has no missing values, we should be able to build a machine learning model.
 
 # %%
 # %%time
-# Instantiate model
-model = RandomForestRegressor(n_jobs=-1,
-                              random_state=42)
-
 # Fit the model
 model.fit(df_tmp.drop('SalePrice', axis=1), df_tmp['SalePrice'])
 
@@ -298,26 +327,6 @@ model.score(df_tmp.drop('SalePrice', axis=1), df_tmp['SalePrice'])
 
 # %% [markdown]
 # **Question:** Why doesn't the above metric hold water? (why isn't the metric reliable)
-
-# %% [markdown]
-# ### Splitting data into train/validation sets
-
-# %%
-df_tmp.head()
-
-# %%
-# Split data into training and validation
-df_val = df_tmp[df_tmp.saleYear == 2012]
-df_train = df_tmp[df_tmp.saleYear != 2012]
-len(df_val), len(df_train)
-
-# %%
-#Split data into X & y
-X_train, y_train = df_train.drop('SalePrice', axis=1), df_train.SalePrice
-X_valid, y_valid = df_val.drop('SalePrice', axis=1), df_val.SalePrice
-
-# %%
-X_train.shape, y_train.shape, X_valid.shape, y_valid.shape
 
 # %% [markdown]
 # ### Building an evaluation function
