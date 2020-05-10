@@ -39,10 +39,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import sklearn
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder
+# from sklearn.compose import ColumnTransformer
+# from sklearn.pipeline import Pipeline
+# from sklearn.impute import SimpleImputer
+# from sklearn.preprocessing import OneHotEncoder
 from jupyterthemes import jtplot
 from IPython.core.display import display, HTML
 
@@ -240,13 +240,13 @@ for label, content in df_tmp.items():
 
 ```python
 # # Fill numeric rows with the median
-# for label, content in df_tmp.items():
-#     if pd.api.types.is_numeric_dtype(content):
-#         if pd.isnull(content).sum():
-#             # Add a binary column which tells us if the data was missing or not
-#             df_tmp[label + '_is_missing'] = pd.isnull(content)
-#             # Fill missing numeric values with median
-#             df_tmp[label] = content.fillna(content.median())
+for label, content in df_tmp.items():
+    if pd.api.types.is_numeric_dtype(content):
+        if pd.isnull(content).sum():
+            # Add a binary column which tells us if the data was missing or not
+            df_tmp[label + '_is_missing'] = pd.isnull(content)
+            # Fill missing numeric values with median
+            df_tmp[label] = content.fillna(content.median())
 ```
 
 
@@ -276,14 +276,14 @@ for label, content in df_tmp.items():
 
 
 ```python
-# # Turn categorical variables into number and fill missing
-# for label, content in df_tmp.items():
-#     if not pd.api.types.is_numeric_dtype(content):
-#         # Add binary column to indicate whether sample had missing value
-#         df_tmp[label + '_is_missing'] = pd.isnull(content)
-#         # Turn categories into numbers and add +1
-#         # Categorical 會將 missing data 分配在 -1 所以將全部 +1
-#         df_tmp[label] = pd.Categorical(content).codes +1
+# Turn categorical variables into number and fill missing
+for label, content in df_tmp.items():
+    if not pd.api.types.is_numeric_dtype(content):
+        # Add binary column to indicate whether sample had missing value
+        df_tmp[label + '_is_missing'] = pd.isnull(content)
+        # Turn categories into numbers and add +1
+        # Categorical 會將 missing data 分配在 -1 所以將全部 +1
+        df_tmp[label] = pd.Categorical(content).codes +1
 ```
 
 
@@ -304,32 +304,9 @@ df_train = df_tmp[df_tmp.saleYear != 2012]
 len(df_val), len(df_train)
 ```
 
-### Create pipeline
-
 ```python
-numeric_features = ['MachineHoursCurrentMeter', 'auctioneerID']
-numeric_transformer = Pipeline(steps=[
-    ('imputer', SimpleImputer(strategy='median'))
-])
-cols = [label for label, content in df_tmp.items() if not pd.api.types.is_numeric_dtype(content)]
-non_numeric_features = cols
-non_numeric_transformer = Pipeline(steps=[
-    ('imputer', SimpleImputer(strategy='constant', fill_value='missing')),
-    ('onehot', OneHotEncoder(handle_unknown='ignore'))
-])
-
-preprocessor = ColumnTransformer(
-    transformers=[
-        ('num', numeric_transformer, numeric_features),
-        ('non_num', non_numeric_transformer, non_numeric_features)        
-    ])
-```
-
-```python
-# Creating a preprocessing and modelling pipeline
-model = Pipeline(steps=[('preprocessor', preprocessor),
-                       ('model', RandomForestRegressor(n_jobs=-1, 
-                                                       random_state=42))])
+model = RandomForestRegressor(n_jobs=-1, 
+                              random_state=42)
 ```
 
 ```python
@@ -369,29 +346,211 @@ def rmsle(y_test, y_preds):
     Caculates root mean squared log error between predictions and
     true labels.
     '''
-    return np.sprt(mean_squared_log_error(y_test, y_preds))
+    return np.sqrt(mean_squared_log_error(y_test, y_preds))
 
 # Create function to evaluation model on a few different levels
 def show_scores(model):
     train_preds = model.predict(X_train)
     val_preds = model.predict(X_valid)
     scores = {'Training MAE': mean_absolute_error(y_train, train_preds),
-              'Valid MAE': mean_absolute_error(y_train, val_preds),
-              'Training RMSLE': rmesl(y_train, train_preds),
-              'Valid RMSLE': rmsle(y_train, val_preds),
+              'Valid MAE': mean_absolute_error(y_valid, val_preds),
+              'Training RMSLE': rmsle(y_train, train_preds),
+              'Valid RMSLE': rmsle(y_valid, val_preds),
               'Training R^2': r2_score(y_train, train_preds),
-              'Valid R^2': r2_score(y_train, val_preds)}
+              'Valid R^2': r2_score(y_valid, val_preds)}
     return scores
 ```
 
-```python
+## Testing our model on a subset (to tune the hyperparameters)
 
+```python
+len(X_train)
 ```
 
 ```python
-
+# Change max_samples value
+model = RandomForestRegressor(n_jobs=-1,
+                              random_state=42,
+                              max_samples=10000)
 ```
 
 ```python
+%%time
+# Cutting down on the max number of samples each estimator can see improves training time
+model.fit(X_train, y_train)
+```
 
+```python
+ show_scores(model)
+```
+
+### Hyerparameter tuning with RandomizedSearchCV
+
+```python
+%%time 
+from sklearn.model_selection import RandomizedSearchCV
+
+# Different RandomForestRegressor hyperparameters
+rf_grid = {'n_estimators': np.arange(10, 100, 10),
+           'max_depth': [None, 3, 5, 10],
+           'min_samples_split': np.arange(2, 20, 2),
+           'min_samples_leaf': np.arange(1, 20 ,2),
+           'max_features': [0.5, 1, 'sqrt', 'auto'],
+           'max_samples':[10000]}
+
+# Instantiate RandomizedSearchCV model
+rs_model = RandomizedSearchCV(RandomForestRegressor(n_jobs=-1,
+                                                    random_state=42),
+                              param_distributions=rf_grid,
+                              n_iter=2,
+                              cv=5,
+                              verbose=True)
+
+# Fit the RandomizedSearchCV model
+rs_model.fit(X_train, y_train)
+```
+
+```python
+# Find the best model hyperparameters
+rs_model.best_params_
+```
+
+```python
+# Evaluate the RandomizedSearch model
+show_scores(rs_model)
+```
+
+## Train a model with the best hyperparamters
+**Note:** These were found after 100 iterations of `RandomizedSearchCV`
+
+```python
+%%time
+# Most ideal hyperparameters
+ideal_model = RandomForestRegressor(n_estimators=40,
+                                    min_samples_leaf=1,
+                                    min_samples_split=14,
+                                    max_features=0.5,
+                                    n_jobs=-1,
+                                    max_samples=None,
+                                    random_state=42)
+# Fix the ideal model
+ideal_model.fit(X_train, y_train)
+```
+
+```python
+# Scores for ideal_model (trained on all the data)
+show_scores(ideal_model)
+```
+
+```python
+# Scores on re_model (only trained on -10,000 examples)
+show_scores(rs_model)
+```
+
+### Make predictions on test data
+
+```python
+# Import the test data
+df_test = pd.read_csv('data/Test.csv',
+                      low_memory=False,
+                      parse_dates=['saledate'])
+df_test.head()
+```
+
+### Preprocessing the data (getting the test dataset in the same format as our training dataset)
+
+```python
+def preprocess_data(df):
+    '''
+    Performs transformations on df and returns transformed df.
+    '''
+    df['saleYear'] = df.saledate.dt.year
+    df['saleMonth'] = df.saledate.dt.month
+    df['saleDay'] = df.saledate.dt.day
+    df['saleDayOfWeek'] = df.saledate.dt.dayofweek
+    df['saleDayOfYear'] = df.saledate.dt.dayofyear
+    
+    df.drop('saledate', axis=1, inplace=True)
+    
+    # # Fill numeric rows with the median
+    for label, content in df.items():
+        if pd.api.types.is_numeric_dtype(content):
+            if pd.isnull(content).sum():
+                # Add a binary column which tells us if the data was missing or not
+                df[label + '_is_missing'] = pd.isnull(content)
+                # Fill missing numeric values with median
+                df[label] = content.fillna(content.median())
+        else:
+            # Add binary column to indicate whether sample had missing value
+            df[label + '_is_missing'] = pd.isnull(content)
+            # Turn categories into numbers and add +1
+            # Categorical 會將 missing data 分配在 -1 所以將全部 +1
+            df[label] = pd.Categorical(content).codes +1
+    return df
+```
+
+```python
+# Process the test data
+df_test = preprocess_data(df_test)
+df_test.head()
+```
+
+Finally now our test dataframe has the same features as our training dataframe, we can make predictions!
+
+```python
+# Find how the columns differ using sets
+set(X_train.columns) - set(df_test.columns)
+```
+
+```python
+# Match test dataset columns to training dataset
+df_test['auctioneerID_is_missing'] = False
+df_test.head()
+```
+
+```python
+# Make predictions on the test data
+test_preds = ideal_model.predict(df_test)
+```
+
+```python
+# Create DataFrame compatible with Kaggle submission requirements
+df_preds = pd.DataFrame()
+df_preds['SalesID'] = df_test.SalesID
+df_preds['SalePrice'] = test_preds
+df_preds
+```
+
+### Feature importance
+
+Feature importance seeks to figure out which different attributes of the data were most importance.
+
+  When it comes to predicting the **target variable** (SalePrice).
+
+```python
+# Find feature importance of our best model
+ideal_model.feature_importances_
+```
+
+```python
+# Helper function for plotting feature importance
+def plot_features(columns, importances, n=20):
+    df = (pd.DataFrame({'features': columns,
+                        'feature_importances': importances})
+          .sort_values('feature_importances', ascending=False)
+          .reset_index(drop=True))
+    # Plot the dataframe
+    fig, ax = plt.subplots()
+    ax.barh(df['features'][:n], df['feature_importances'][:20])
+    ax.set_ylabel('Features')
+    ax.set_xlabel('Feature importance')
+    ax.invert_yaxis()
+```
+
+```python
+plot_features(X_train.columns, ideal_model.feature_importances_)
+```
+
+```python
+df['ProductSize'].value_counts()
 ```
